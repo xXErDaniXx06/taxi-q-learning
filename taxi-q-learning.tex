@@ -1,0 +1,138 @@
+\documentclass[12pt,a4paper]{article}
+
+% Paquetes esenciales
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\geometry{a4paper, margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+% Configuración de colores para el código
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+\title{\textbf{Agente Autónomo de Navegación y Planificación:\\Resolución del Entorno Taxi-v3 mediante Q-Learning}}
+\author{Daniel}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+El presente documento detalla el desarrollo y fundamentación matemática de un agente de Inteligencia Artificial basado en Aprendizaje por Refuerzo (Reinforcement Learning). Se aborda la resolución del entorno estocástico Taxi-v3 utilizando una arquitectura tabular de Q-Learning. El agente, entrenado sobre un Espacio de Estados discreto, converge hacia una política óptima de navegación mediante la aplicación iterativa de la Ecuación de Optimidad de Bellman, demostrando la eficacia del control \textit{off-policy} en problemas de planificación y logística sin conocimiento previo del entorno.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introducción y Modelado del Entorno}
+
+El entorno abordado se modela formalmente como un \textbf{Proceso de Decisión de Markov (MDP)}, definido por la tupla $\langle \mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \gamma \rangle$. Para que el algoritmo garantice la convergencia, la topología del problema debe satisfacer la Propiedad de Markov: la distribución de probabilidad condicional de los estados futuros depende únicamente del estado presente, siendo independiente del historial de estados previos.
+
+\subsection{Espacio de Estados ($\mathcal{S}$)}
+El entorno consta de una cuadrícula bidimensional bidimensional de $5 \times 5$. El estado general del sistema $s \in \mathcal{S}$ es una combinación lineal de las siguientes variables discretas:
+\begin{itemize}
+    \item Coordenadas del agente: $(x, y) \in \{0, 1, 2, 3, 4\}^2$ ($25$ posiciones).
+    \item Ubicación del pasajero: $4$ paradas posibles o en el interior del vehículo ($5$ estados).
+    \item Destino objetivo: $4$ paradas posibles.
+\end{itemize}
+Esto define un espacio cardinal compacto de $|\mathcal{S}| = 25 \times 5 \times 4 = 500$ estados discretos.
+
+\subsection{Espacio de Acciones ($\mathcal{A}$) y Función de Recompensa ($\mathcal{R}$)}
+En cualquier estado $s_t$, el agente puede seleccionar una acción $a_t \in \mathcal{A}$, donde $|\mathcal{A}| = 6$ (moverse en los cuatro puntos cardinales, recoger o dejar al pasajero).
+
+La función de recompensa $\mathcal{R}: \mathcal{S} \times \mathcal{A} \rightarrow \mathbb{R}$ se diseña para penalizar la ineficiencia logística e incentivar la resolución del problema:
+\begin{equation}
+    R(s, a) = 
+    \begin{cases} 
+      +20 & \text{Si } a \text{ es soltar al pasajero en el destino correcto.} \\
+      -10 & \text{Si } a \text{ es recoger/dejar de forma inválida.} \\
+      -1 & \text{Para cualquier otra acción de movimiento.} 
+   \end{cases}
+\end{equation}
+
+\section{Fundamentación Matemática: Q-Learning}
+
+Q-Learning es un algoritmo de control basado en el método de Diferencia Temporal (TD), clasificado como \textit{off-policy}. Su objetivo es aproximar la función óptima de valor de acción $Q^*(s, a)$, independientemente de la política que siga el agente para explorar el entorno.
+
+\subsection{La Función de Valor de Acción ($Q$)}
+Definimos la función del valor $Q^\pi(s, a)$ como el retorno esperado (suma de recompensas futuras descontadas) partiendo del estado $s$, ejecutando la acción $a$, y siguiendo posteriormente la política $\pi$:
+\begin{equation}
+    Q^\pi(s,a) = \mathbb{E}_\pi \left[ \sum_{k=0}^\infty \gamma^k R_{t+k+1} \bigg| S_t = s, A_t = a \right]
+\end{equation}
+Donde $\gamma \in [0, 1)$ es el factor de descuento. El objetivo primordial es hallar la política óptima $\pi^*$ tal que maximice este valor para todo par estado-acción:
+\begin{equation}
+    Q^*(s, a) = \max_{\pi} Q^\pi(s, a)
+\end{equation}
+
+\subsection{La Ecuación de Optimidad de Bellman}
+Para que el agente aprenda iterativamente, explotamos la formulación recursiva de la ecuación de Bellman. El valor óptimo de un estado-acción es la recompensa esperada inmediata más el valor máximo descontado del estado resultante:
+\begin{equation}
+    Q^*(s,a) = \mathbb{E} \left[ R_{t+1} + \gamma \max_{a'} Q^*(S_{t+1}, a') \bigg| S_t=s, A_t=a \right]
+\end{equation}
+
+\subsection{Regla de Actualización por Diferencia Temporal (TD)}
+Dado que el agente desconoce las probabilidades de transición $\mathcal{P}$, no puede resolver el sistema de ecuaciones analíticamente. En su lugar, inicializamos una matriz $\mathbf{Q} \in \mathbb{R}^{500 \times 6}$ con valores arbitrarios (ceros) y la actualizamos de forma empírica tras cada paso computando el error TD ($\delta$):
+\begin{equation}
+    \delta_t = R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t)
+\end{equation}
+La matriz se reescribe iterativamente absorbiendo una fracción de este error ponderada por la tasa de aprendizaje $\alpha \in (0, 1]$:
+\begin{equation} \label{eq:qlearning}
+    Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha \Big[ R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t) \Big]
+\end{equation}
+
+Bajo las condiciones estocásticas de Robbins-Monro sobre la tasa de aprendizaje $\alpha$, y asumiendo que todos los pares $(s, a)$ se visitan infinitas veces, la aproximación tabular está matemáticamente garantizada a converger al valor óptimo $Q \to Q^*$.
+
+\section{Implementación Algorítmica}
+
+Para garantizar que el agente visite todos los estados necesarios para la convergencia, se implementa una política de comportamiento probabilística denominada $\epsilon$-greedy. En cada instante de tiempo $t$, la probabilidad de elegir una acción aleatoria es $\epsilon$, fomentando la exploración; mientras que con probabilidad $1 - \epsilon$, se selecciona la acción óptima conocida $\arg\max_a Q(s, a)$, fomentando la explotación.
+
+\begin{lstlisting}[language=Python, caption=Bucle central de Q-Learning (Ecuación de Bellman)]
+# Se recupera el valor Q previo
+valor_antiguo = q_table[estado, accion]
+
+# Extrapolacion del mejor valor futuro (Temporal Difference)
+proximo_maximo = np.max(q_table[siguiente_estado])
+
+# Actualizacion basada en la ecuacion de Bellman (Ec. 6)
+nuevo_valor = (1 - alpha) * valor_antiguo + alpha * (recompensa + gamma * proximo_maximo)
+
+# Mutacion de la Q-Table en memoria
+q_table[estado, accion] = nuevo_valor
+\end{lstlisting}
+
+\section{Resultados y Evaluación de la Convergencia}
+
+Tras un entrenamiento de $10.000$ episodios iterativos con los hiperparámetros estáticos $\alpha = 0.1$, $\gamma = 0.6$ y $\epsilon = 0.1$, el sistema demuestra una convergencia empírica total. 
+
+El trazado de la media móvil de las recompensas acumuladas revela una función monótona creciente, que asciende de forma abrupta en los primeros $2.000$ episodios antes de asintotizar en valores positivos máximos. Correlativamente, la gráfica de penalizaciones decae exponencialmente hacia un límite absoluto de cero, demostrando que el agente ha inferido la ruta espacial más eficiente (camino mínimo geométrico) y asimilado las secuencias lógicas de actuación sin intervención determinista ni programación heurística explícita por parte del desarrollador.
+
+\end{document}
